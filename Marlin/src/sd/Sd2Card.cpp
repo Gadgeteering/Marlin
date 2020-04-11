@@ -424,35 +424,46 @@ bool Sd2Card::readData(uint8_t* dst) {
   #endif
 #endif // SD_CHECK_AND_RETRY
 
-bool Sd2Card::readData(uint8_t* dst, const uint16_t count) {
-  bool success = false;
-
-  const millis_t read_timeout = millis() + SD_READ_TIMEOUT;
-  while ((status_ = spiRec()) == 0xFF) {      // Wait for start block token
-    if (ELAPSED(millis(), read_timeout)) {
+bool Sd2Card::readData(uint8_t* dst, uint16_t count) {
+  // wait for start block token
+  uint16_t t0 = millis();
+  while ((status_ = spiRec()) == 0XFF) {
+    if (((uint16_t)millis() - t0) > SD_READ_TIMEOUT) {
       error(SD_CARD_ERROR_READ_TIMEOUT);
-      goto FAIL;
+      goto fail;
     }
   }
-
-  if (status_ == DATA_START_BLOCK) {
-    spiRead(dst, count);                      // Transfer data
-
-    const uint16_t recvCrc = (spiRec() << 8) | spiRec();
-    #if ENABLED(SD_CHECK_AND_RETRY)
-      success = !crcSupported || recvCrc == CRC_CCITT(dst, count);
-      if (!success) error(SD_CARD_ERROR_READ_CRC);
-    #else
-      success = true;
-      UNUSED(recvCrc);
-    #endif
-  }
-  else
+  if (status_ != DATA_START_BLOCK) {
     error(SD_CARD_ERROR_READ);
+    goto fail;
+  }
+  // transfer data
+  spiRead(dst, count);
 
-  FAIL:
-  chipDeselect();
-  return success;
+#if ENABLED(SD_CHECK_AND_RETRY)
+  {
+    uint16_t calcCrc = CRC_CCITT(dst, count);
+    uint16_t recvCrc = spiRec() << 8;
+    recvCrc |= spiRec();
+    if (calcCrc != recvCrc) {
+      error(SD_CARD_ERROR_CRC);
+      goto fail;
+    }
+  }
+#else
+  // discard CRC
+  spiRec();
+  spiRec();
+#endif
+  chipSelectHigh();
+  // Send an additional dummy byte, required by Toshiba Flash Air SD Card
+  spiSend(0XFF);
+  return true;
+fail:
+  chipSelectHigh();
+  // Send an additional dummy byte, required by Toshiba Flash Air SD Card
+  spiSend(0XFF);
+  return false;
 }
 
 /** read CID or CSR register */
@@ -640,3 +651,4 @@ bool Sd2Card::writeStop() {
 }
 
 #endif // SDSUPPORT
+

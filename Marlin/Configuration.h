@@ -1336,6 +1336,14 @@
  */
 //#define Z_PROBE_END_SCRIPT "G1 Z10 F12000\nG1 X15 Y330\nG1 Z0.5\nG1 Z10"
 
+//Enable weight sensor (load cell) for Z axis.
+//#define ELECTRONIC_SCALE_PROBE
+#ifdef ELECTRONIC_SCALE_PROBE
+  #define SCALE_GAIN 64 // 128 or 64 only for A channel 32 only for B channel
+  #define SCALE_SENSIVITY_HARD 40
+  #define SCALE_SENSIVITY_ACCURATE 5
+  #define SCALE_DIVISOR 1000.f
+#endif
 
 // @section homing
 
